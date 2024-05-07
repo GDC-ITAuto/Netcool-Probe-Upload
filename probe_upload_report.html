@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Probe-upload</title>
+    <style>
+        /* CSS styles */
+
+        .header {
+            padding: 10px 20px;
+            text-align: center;
+            background-image: url('https://media.giphy.com/media/3o85xGdsSCHfTPBJok/giphy.gif');
+        }
+
+        .header img {
+            width: 70px;
+            height: auto;
+            vertical-align: middle;
+        }
+
+        .header h1 {
+            display: inline-block;
+            margin: 0;
+            vertical-align: middle;
+            color: rgb(0, 2, 0);
+            font-size: 30px;
+            margin-left: 10px;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-size: cover;
+            font-size: 13px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .metrics-container {
+            width: 48%;
+            padding: 20px;
+            border-radius: 30px;
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+
+        .metrics-container p {
+            font-size: 17px;
+            text-align: justify;
+        }
+
+        /* Report container styles */
+        .report-container {
+            width: 48%;
+            padding: 30px;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            border-radius: 30px;
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Added styles for row and box */
+        .row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px; /* Space between rows */
+        }
+
+        .box {
+            border: 1px solid black;
+            padding: 10px;
+            border-radius: 5px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            width: 48%; /* Two boxes per row */
+            height: 80px; /* Reduced height */
+            background-color: white;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .parameter {
+            font-weight: bold;
+        }
+
+        .value,
+        .expected,
+        .comparison {
+            font-style: italic;
+        }
+
+        .match {
+            color: green;
+        }
+
+        .mismatch {
+            color: red;
+        }
+
+        footer {
+            padding: 15px;
+            background-color: black;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <img src="https://pngimg.com/uploads/ibm/ibm_PNG19655.png" alt="IBM Logo" class="logo">
+        <h1>Netcool Probe</h1>
+    </div>
+
+    <div class="container">
+        <div class="metrics-container">
+            <h2>Parameter Descriptions</h2>
+            <div class="specs">
+                <p><strong>PeerHost:</strong> Hostname of the failover pair of probe instance.</p>
+                <p><strong>Mode:</strong> Mode allows setting up two probes to act as a failover pair to improve availability. If the master probe stops working, the slave probe takes over until the master is available again.</p>
+            </div>
+            <div class="kpis">
+                <p><strong>RulesFileProcessingTime:</strong> Time taken by the rules file for processing a trap/message.</p>
+                <p><strong>PollServer:</strong> The time period, in seconds, when the probe tries to reconnect with the primary ObjectServer.</p>
+                <p><strong>NetworkTimeout:</strong> The timeout period, in seconds, for the primary ObjectServer. If the probe does not receive a response from the ObjectServer within that time, it connects to the backup ObjectServer.</p>
+                <p><strong>MessageLevel:</strong> Property for the required level for message logging.</p>
+            </div>
+        </div>
+
+        <div class="report-container">
+            <h1>GDC HealthCheck Report</h1>
+            <input type="file" id="fileInput">
+            <button onclick="handleFile()">Generate Report</button>
+            <button onclick="downloadAsPdf()">Download PDF</button>
+            <h3>Current Report</h3>
+            <div id="report"></div>
+            <div id="chart"></div>
+        </div>
+    </div>
+
+    <footer>
+        <p><strong>Disclaimer:</strong> The report tries to compare the important parameters to the recommended values that define performance of the system. A match of the values, however, does not necessarily guarantee that the system is problem-free. It is recommended that a more comprehensive review of the system be done by our SMEs at the GDC.</p>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    <script>
+        // File handling function
+        function handleFile() {
+            // Retrieve the file from the input element
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            // Create a new FileReader instance to read the file
+            const reader = new FileReader();
+
+            // Define a callback function to handle file reading
+            reader.onload = function(event) {
+                // Parse the file contents as JSON data
+                const contents = event.target.result;
+                const data = JSON.parse(contents);
+                
+                // HTML string for the report
+                let reportHTML = '';
+                
+                // Define helper function to create report boxes
+                function createReportBox(key, value) {
+                    let formattedValue = value;
+                    let recommendation = '';
+
+                    // Format the value and provide recommendations based on the key
+                    if (key === 'RulesFileProcessingTime') {
+                        const microsecondsValue = parseFloat(value.replace(' usec', ''));
+                        formattedValue = `${microsecondsValue} usec`;
+                        if (microsecondsValue > 60000) {
+                            recommendation = '<span class="mismatch">Consider optimizing the rules file processing time to improve performance.</span>';
+                        }
+                    } else if (key === 'PollServer') {
+                        const secondsValue = parseFloat(value);
+                        formattedValue = `${secondsValue} seconds`;
+                        if (data.Mode && (data.Mode.toLowerCase() === 'master' || data.Mode.toLowerCase() === 'slave')) {
+                            if (secondsValue < 60) {
+                                recommendation = '<span class="mismatch">Adjust PollServer to 60 seconds for better performance.</span>';
+                            }
+                        }
+                    } else if (key === 'NetworkTimeout') {
+                        const timeoutValue = parseFloat(value);
+                        formattedValue = `${timeoutValue} seconds`;
+                        if (data.Mode && (data.Mode.toLowerCase() === 'master' || data.Mode.toLowerCase() === 'slave')) {
+                            if (timeoutValue <= 0) {
+                                recommendation = '<span class="mismatch">Set NetworkTimeout to a value greater than 0 for better performance.</span>';
+                            }
+                        }
+                    }
+
+                    // Return the HTML for the report box with the key, formatted value, and recommendation
+                    return `
+                        <div class="box">
+                            <strong>${key}:</strong> ${formattedValue}
+                            ${recommendation}
+                        </div>
+                    `;
+                }
+
+                // Create the report using the parsed data
+                reportHTML += `
+                    <div class="row">
+                        ${createReportBox('Type of Probe', data.Name)}
+                        ${createReportBox('Version', data.Version)}
+                    </div>
+                    <div class="row">
+                        ${createReportBox('PeerHost', data.PeerHost)}
+                    </div>
+                `;
+
+                // Add recommendations based on mode
+                if (data.Mode) {
+                    if (data.Mode.toLowerCase() === 'standard') {
+                        reportHTML += `
+                            <h2>Mode: ${data.Mode}</h2>
+                            <p><strong>Recommendation:</strong> Enable high availability (HA) by adding another instance of Probe for better fault tolerance.</p>
+                        `;
+                    } else if (data.Mode.toLowerCase() === 'slave' || data.Mode.toLowerCase() === 'master') {
+                        reportHTML += `
+                            <h2>Mode: ${data.Mode}</h2>
+                            <p><strong>Recommendation:</strong> Adjust PollServer to 60 seconds and NetworkTimeout to a value greater than 0.</p>
+                        `;
+                    }
+                }
+
+                // Add KPIs
+                reportHTML += '<h2>Key Performance Indicators (KPIs):</h2>';
+                
+                // Add rows with two boxes each
+                reportHTML += `
+                    <div class="row">
+                        ${createReportBox('RulesFileProcessingTime', data.RulesFileProcessingTime)}
+                        ${createReportBox('PollServer', data.PollServer)}
+                    </div>
+                    <div class="row">
+                        ${createReportBox('NetworkTimeout', data.NetworkTimeout)}
+                        ${createReportBox('MessageLevel', data.MessageLevel)}
+                    </div>
+                `;
+
+                // Display the generated report in the element with ID 'report'
+                document.getElementById('report').innerHTML = reportHTML;
+            };
+
+            // Read the file as text
+            reader.readAsText(file);
+        }
+
+        // Function to download the report as a PDF
+        function downloadAsPdf() {
+            window.print();
+        }
+    </script>
+</body>
+
+</html>
